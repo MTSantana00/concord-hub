@@ -82,6 +82,8 @@
     "publish": [
       {
         "provider": "github",
+        "owner": "MTSantana00",
+        "repo": "concord-hub",
         "releaseType": "release"
       }
     ]
