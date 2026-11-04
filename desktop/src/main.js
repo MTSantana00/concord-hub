@@ -244,6 +244,9 @@ function smokeTest() {
   }, 45_000);
 }
 
+// no Windows, sem este identificador (o mesmo appId do instalador) as notificações do sistema não aparecem
+app.setAppUserModelId("br.com.concordhub.desktop");
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
