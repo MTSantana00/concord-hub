@@ -1,0 +1,20 @@
+# LiveKit na máquina A1. As chaves NÃO ficam aqui: vêm da variável LIVEKIT_KEYS (ver livekit.service).
+# O instalar.sh troca __DOMINIO__ pelo nome do DuckDNS.
+port: 7880            # sinalização: só o Caddy (HTTPS) fala com ela; NÃO é aberta no firewall
+bind_addresses:
+  - "127.0.0.1"
+
+rtc:
+  tcp_port: 7881      # fallback quando o UDP é bloqueado
+  udp_port: 7882      # uma porta UDP só para todo o áudio/vídeo
+  use_external_ip: true
+
+# TURN embutido: ajuda quem está em rede difícil (celular, empresa) a conectar
+turn:
+  enabled: true
+  udp_port: 3478
+  domain: __DOMINIO__
+
+# Sala vazia some depois de 1 minuto (sem sala fantasma)
+room:
+  empty_timeout: 60

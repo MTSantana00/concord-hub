@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/styles.css"
+        ],
+        "createdAt": "2026-10-31T18:06:28.257Z",
+        "reason": "assistant: barra lateral da citação do chat (.msg-quote), convenção de citação, não card decorativo"
+      }
+    ]
+  }
+}

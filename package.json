@@ -1,0 +1,19 @@
+{
+  "name": "discord-amigos",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client,media -c blue,green,magenta \"npm run dev -w server\" \"npm run dev -w client\" \"npm run media\"",
+    "test": "npm test -ws",
+    "build": "npm run build -ws --if-present",
+    "media": "media/livekit/livekit-server.exe --dev",
+    "start": "npm run start -w server",
+    "licencas": "node scripts/gerar-licencas.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

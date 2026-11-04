@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "client/src/styles.css"
+        ],
+        "createdAt": "2026-10-30T23:48:06.241Z",
+        "reason": "Claude decidiu (usuário não confirmou): barra lateral é a convenção de citação de resposta, cartão de pré-visualização de link e destaque de menção em apps de chat (Discord/Slack); não é cartão decorativo"
+      }
+    ]
+  }
+}

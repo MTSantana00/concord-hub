@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Compartilhar tela</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #08090c; color: #eceef4; font: 15px/1.4 "Segoe UI", system-ui, sans-serif; }
+  main { padding: 16px; }
+  h1 { font-size: 1.1rem; margin: 0 0 4px; }
+  p { margin: 0 0 12px; color: #9ba2b4; }
+  h2 { font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: #9ba2b4; margin: 14px 0 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  button { background: #12141b; color: inherit; border: 0; border-radius: 12px; padding: 8px; text-align: left; cursor: pointer; box-shadow: inset 0 0 0 1px #2a3042; font: inherit; }
+  button:hover, button:focus-visible { box-shadow: inset 0 0 0 2px #d57d82; outline: none; }
+  img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; background: #000; display: block; margin-bottom: 6px; }
+  span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>O que você quer compartilhar?</h1>
+  <p>Escolha uma tela inteira ou uma janela. No Windows, o som do computador vai junto.</p>
+  <h2>Telas</h2>
+  <div class="grid" id="screens"></div>
+  <h2>Janelas</h2>
+  <div class="grid" id="windows"></div>
+</main>
+<script>
+  window.picker.list().then((sources) => {
+    for (const s of sources) {
+      const b = document.createElement("button");
+      b.type = "button";
+      const img = document.createElement("img");
+      img.src = s.thumbnail;
+      img.alt = "";
+      const label = document.createElement("span");
+      label.textContent = s.name;
+      b.append(img, label);
+      b.addEventListener("click", () => window.picker.choose(s.id));
+      document.getElementById(s.screen ? "screens" : "windows").append(b);
+    }
+  });
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape") window.close(); });
+</script>
+</body>
+</html>

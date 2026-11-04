@@ -1,0 +1,18 @@
+[Unit]
+Description=Concord Hub (app)
+After=network.target
+
+[Service]
+User=concord
+WorkingDirectory=/opt/concord
+EnvironmentFile=/etc/concord/.env
+ExecStart=/usr/bin/node server/dist/index.js
+Restart=always
+RestartSec=3
+# Isolamento básico
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/concord
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,46 @@
+name: App de computador
+
+# Gera os instaladores de Windows, Mac e Linux e os publica numa Release do GitHub (grátis).
+# Para lançar uma versão: mude "version" em desktop/package.json, e rode
+#   git tag v1.0.1 && git push origin v1.0.1
+# (ou use "Run workflow" na aba Actions para só gerar os arquivos, sem publicar).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  instaladores:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write # criar a Release e anexar os instaladores
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+        working-directory: desktop
+      - run: npm test
+        working-directory: desktop
+      - name: Gerar e publicar (só quando é uma tag)
+        run: npx electron-builder --publish ${{ startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
+        working-directory: desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false" # sem certificado de assinatura (é pago): os instaladores saem sem assinatura
+      - name: Guardar os instaladores (execução manual)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: instalador-${{ matrix.os }}
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.dmg
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+          if-no-files-found: warn

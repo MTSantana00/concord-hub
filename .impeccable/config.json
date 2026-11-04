@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "client/src/styles.css"
+        ],
+        "createdAt": "2026-10-31T17:39:48.124Z",
+        "reason": "assistant: barra lateral é a convenção de citação/embed de chat (.reply-quote, .link-preview), não card decorativo; já existia, só troquei a cor para --accent-text"
+      }
+    ]
+  }
+}

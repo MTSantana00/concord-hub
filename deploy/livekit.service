@@ -1,0 +1,15 @@
+[Unit]
+Description=LiveKit (voz, câmera e tela do Concord Hub)
+After=network.target
+
+[Service]
+User=concord
+# /etc/concord/livekit.env contém uma linha:  LIVEKIT_KEYS=chave: segredo   (a mesma chave/segredo do /etc/concord/.env)
+EnvironmentFile=/etc/concord/livekit.env
+ExecStart=/opt/livekit/livekit-server --config /opt/concord/deploy/livekit.yaml
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

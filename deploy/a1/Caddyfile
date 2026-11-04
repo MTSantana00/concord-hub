@@ -1,0 +1,6 @@
+# HTTPS automático (certificado grátis da Let's Encrypt) só para a sinalização do LiveKit (wss://).
+# O áudio/vídeo em si vai direto pelas portas UDP 7882 / TCP 7881 / UDP 3478 (ver livekit.yaml).
+# O instalar.sh troca __DOMINIO__ pelo nome do DuckDNS.
+__DOMINIO__ {
+	reverse_proxy 127.0.0.1:7880
+}

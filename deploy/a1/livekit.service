@@ -1,0 +1,16 @@
+[Unit]
+Description=LiveKit (voz, câmera e tela do Concord Hub) na A1
+After=network.target
+
+[Service]
+User=livekit
+# /etc/livekit/livekit.env tem uma linha:  LIVEKIT_KEYS=chave: segredo   (permissão 600; gerado pelo instalar.sh)
+EnvironmentFile=/etc/livekit/livekit.env
+ExecStart=/opt/livekit/livekit-server --config /etc/livekit/livekit.yaml
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

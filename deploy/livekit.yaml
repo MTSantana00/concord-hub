@@ -1,0 +1,19 @@
+# Configuração do LiveKit na VM. As chaves NÃO ficam aqui: vêm da variável LIVEKIT_KEYS (ver livekit.service).
+port: 7880            # sinalização (o Caddy faz o HTTPS na frente)
+bind_addresses:
+  - "127.0.0.1"       # só o Caddy fala com essa porta
+
+rtc:
+  tcp_port: 7881      # fallback quando UDP é bloqueado
+  udp_port: 7882      # uma porta UDP só para todo o áudio/vídeo (mais simples de liberar no firewall)
+  use_external_ip: true
+
+# Servidor TURN embutido: ajuda amigos atrás de redes difíceis (celular, empresa) a conectar
+turn:
+  enabled: true
+  udp_port: 3478
+  domain: concord-media.EXEMPLO.duckdns.org
+
+# Sem sala fantasma: sala vazia some depois de 1 minuto
+room:
+  empty_timeout: 60

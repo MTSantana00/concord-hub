@@ -1,0 +1,89 @@
+{
+  "name": "concord-hub-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Concord Hub para computador (Windows, Mac e Linux): o site numa janela própria, com bandeja, atalhos globais e seletor de tela.",
+  "author": "Concord Hub",
+  "license": "UNLICENSED",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  },
+  "devDependencies": {
+    "electron": "45.2.2",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "br.com.concordhub.desktop",
+    "productName": "Concord Hub",
+    "copyright": "Concord Hub",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Concord-Hub-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Concord Hub",
+      "language": "1046"
+    },
+    "mac": {
+      "category": "public.app-category.social-networking",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "Concord-Hub-${version}-${arch}.${ext}",
+      "identity": null,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "O Concord Hub usa o microfone nas salas de voz e chamadas.",
+        "NSCameraUsageDescription": "O Concord Hub usa a câmera quando você a liga numa chamada."
+      }
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network;Chat",
+      "artifactName": "Concord-Hub-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

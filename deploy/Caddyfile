@@ -1,0 +1,12 @@
+# HTTPS automático (certificado grátis da Let's Encrypt). Troque os dois endereços pelos seus.
+# O app:
+concord.EXEMPLO.duckdns.org {
+	encode gzip
+	reverse_proxy 127.0.0.1:3001
+}
+
+# O servidor de mídia (LiveKit), só a parte de sinalização por wss://. O áudio/vídeo em si vai direto
+# pelas portas UDP/TCP do LiveKit (ver deploy/livekit.yaml e o README).
+concord-media.EXEMPLO.duckdns.org {
+	reverse_proxy 127.0.0.1:7880
+}
