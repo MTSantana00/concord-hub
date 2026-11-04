@@ -80,6 +80,7 @@ export function useCalls(currentUserId: number | undefined, silent = false) {
         const n = new Notification(`📞 ${call.peer.username} está ligando`, { body: "Abra o Concord Hub para atender", tag: `call-${call.dmId}`, requireInteraction: true });
         n.onclick = () => {
           window.focus();
+          (window as { concordDesktop?: { show?: () => void } }).concordDesktop?.show?.();
           n.close();
         };
       } catch {

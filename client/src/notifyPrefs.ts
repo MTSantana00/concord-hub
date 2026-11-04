@@ -12,7 +12,9 @@ export interface NotifyPrefs {
 }
 
 const KEY = "concord.notify";
-const DEFAULT: NotifyPrefs = { sounds: true, callSounds: true, volume: 60, desktop: false };
+// No app de computador não há o que o navegador pergunta: os avisos já nascem ligados
+const inDesktopApp = typeof window !== "undefined" && "concordDesktop" in window;
+const DEFAULT: NotifyPrefs = { sounds: true, callSounds: true, volume: 60, desktop: inDesktopApp };
 
 function load(): NotifyPrefs {
   try {

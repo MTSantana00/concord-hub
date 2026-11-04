@@ -147,6 +147,7 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
               const n = new Notification(who, { body, tag: key(place.kind, place.id) });
               n.onclick = () => {
                 window.focus();
+                (window as { concordDesktop?: { show?: () => void } }).concordDesktop?.show?.();
                 n.close();
               };
             } catch {

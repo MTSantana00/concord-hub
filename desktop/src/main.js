@@ -204,6 +204,9 @@ function registerHotkeys(config) {
 }
 
 function setupIpc() {
+  ipcMain.on("window:show", (event) => {
+    if (ownUrl(event.senderFrame?.url ?? "")) showWindow();
+  });
   ipcMain.on("hotkeys:set", (event, config) => {
     // só o site do Concord pode mexer nos atalhos do computador
     if (!ownUrl(event.senderFrame?.url ?? "")) return;
@@ -228,7 +231,7 @@ function smokeTest() {
   win.webContents.once("did-finish-load", async () => {
     try {
       const info = await win.webContents.executeJavaScript(
-        "JSON.stringify({ title: document.title, bridge: typeof window.concordDesktop, platform: window.concordDesktop && window.concordDesktop.platform, setHotkeys: window.concordDesktop && typeof window.concordDesktop.setHotkeys })",
+        "JSON.stringify({ title: document.title, bridge: typeof window.concordDesktop, platform: window.concordDesktop && window.concordDesktop.platform, setHotkeys: window.concordDesktop && typeof window.concordDesktop.setHotkeys, notification: Notification.permission })",
       );
       console.log(`SMOKE ${info}`);
     } catch (err) {
