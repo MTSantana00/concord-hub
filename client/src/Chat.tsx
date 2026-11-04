@@ -312,8 +312,11 @@ export function Chat({
     setCaret(next.caret);
     setMentionIdx(0);
     requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.setSelectionRange(next.caret, next.caret);
+      const input = inputRef.current;
+      if (!input) return;
+      input.focus();
+      // só reposiciona o cursor se a pessoa ainda não digitou nada depois (senão o texto novo iria para o lugar errado)
+      if (input.value === next.text) input.setSelectionRange(next.caret, next.caret);
     });
   }
   function onComposerKeyDown(e: KeyboardEvent<HTMLInputElement>) {
