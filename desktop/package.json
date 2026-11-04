@@ -1,9 +1,13 @@
 {
   "name": "concord-hub-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Concord Hub para computador (Windows, Mac e Linux): o site numa janela própria, com bandeja, atalhos globais e seletor de tela.",
-  "author": "Concord Hub",
+  "homepage": "https://concord-hub.duckdns.org",
+  "author": {
+    "name": "Concord Hub",
+    "email": "201297863+MTSantana00@users.noreply.github.com"
+  },
   "license": "UNLICENSED",
   "main": "src/main.js",
   "scripts": {
