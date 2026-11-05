@@ -3112,6 +3112,22 @@ describe("voz melhor: dispositivos, volume, ensurdecer, apertar para falar e tir
     delete (HTMLMediaElement.prototype as unknown as Record<string, unknown>).setSinkId;
   });
 
+  it("supressão de ruído e eco: já vêm ligadas, valem ao entrar, mudam na hora com o microfone aberto e ficam guardadas", async () => {
+    stubApi(base());
+    const barra = await entrar();
+    expect(sala().options.audioCaptureDefaults).toMatchObject({ noiseSuppression: true, echoCancellation: true });
+    const restartTrack = vi.fn(async (_o: object) => {});
+    sala().localParticipant.pubs.microphone = { audioTrack: { restartTrack } };
+    await userEvent.click(within(barra).getByText("⚙ Ajustes de voz"));
+    const ruido = within(barra).getByLabelText("Supressão de ruído do microfone") as HTMLInputElement;
+    expect(ruido.checked).toBe(true);
+    await userEvent.click(ruido);
+    await vi.waitFor(() => expect(restartTrack).toHaveBeenCalledWith(expect.objectContaining({ noiseSuppression: false, echoCancellation: true })));
+    expect(JSON.parse(localStorage.getItem("concord.voice")!)).toMatchObject({ noiseSuppression: false, echoCancellation: true });
+    await userEvent.click(within(barra).getByLabelText("Cancelamento de eco"));
+    await vi.waitFor(() => expect(restartTrack).toHaveBeenLastCalledWith(expect.objectContaining({ noiseSuppression: false, echoCancellation: false })));
+  });
+
   it("volume de cada pessoa: o controle aparece para quem está na sala, vale na hora e fica guardado para as próximas vezes", async () => {
     stubApi(base());
     const barra = await entrar();

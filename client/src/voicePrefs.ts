@@ -9,12 +9,16 @@ export interface VoicePrefs {
   pushToTalk: boolean;
   /** `KeyboardEvent.code` da tecla de falar. */
   pttKey: string;
+  /** Supressão de ruído do microfone (teclado, ventilador, fundo). Ligada por padrão. */
+  noiseSuppression: boolean;
+  /** Cancelamento de eco (evita que o som da caixa volte pelo microfone). Ligado por padrão. */
+  echoCancellation: boolean;
   /** Volume de cada pessoa (0 a 100), por id de usuário. Ausente = 100. */
   volumes: Record<string, number>;
 }
 
 const KEY = "concord.voice";
-const DEFAULT: VoicePrefs = { micId: "", camId: "", speakerId: "", pushToTalk: false, pttKey: "KeyV", volumes: {} };
+const DEFAULT: VoicePrefs = { micId: "", camId: "", speakerId: "", pushToTalk: false, pttKey: "KeyV", noiseSuppression: true, echoCancellation: true, volumes: {} };
 
 function load(): VoicePrefs {
   try {
@@ -27,6 +31,8 @@ function load(): VoicePrefs {
       speakerId: typeof s?.speakerId === "string" ? s.speakerId : "",
       pushToTalk: s?.pushToTalk === true,
       pttKey: typeof s?.pttKey === "string" && s.pttKey !== "" ? s.pttKey : DEFAULT.pttKey,
+      noiseSuppression: s?.noiseSuppression !== false,
+      echoCancellation: s?.echoCancellation !== false,
       volumes,
     };
   } catch {

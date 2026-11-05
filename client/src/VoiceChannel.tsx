@@ -227,7 +227,7 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
     const build = ({ Room, RoomEvent, Track }: LK) => {
     const prefs = getVoicePrefs();
     const r = new Room({
-      audioCaptureDefaults: prefs.micId ? { deviceId: prefs.micId } : undefined,
+      audioCaptureDefaults: { ...(prefs.micId ? { deviceId: prefs.micId } : {}), noiseSuppression: prefs.noiseSuppression, echoCancellation: prefs.echoCancellation },
       videoCaptureDefaults: prefs.camId ? { deviceId: prefs.camId } : undefined,
       audioOutput: prefs.speakerId ? { deviceId: prefs.speakerId } : undefined,
     });
@@ -411,6 +411,18 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
     }
   }, []);
 
+  /** Liga/desliga supressão de ruído ou eco no meio da chamada, sem sair da sala. */
+  const setAudioProcessing = useCallback(async (patch: { noiseSuppression?: boolean; echoCancellation?: boolean }) => {
+    updateVoicePrefs(patch);
+    const p = getVoicePrefs();
+    try {
+      const pub = (room.current as unknown as { localParticipant?: { getTrackPublication?: (s: string) => { audioTrack?: { restartTrack?: (o: object) => Promise<void> } } | undefined } } | null)?.localParticipant?.getTrackPublication?.("microphone");
+      await pub?.audioTrack?.restartTrack?.({ noiseSuppression: p.noiseSuppression, echoCancellation: p.echoCancellation, ...(p.micId ? { deviceId: p.micId } : {}) });
+    } catch {
+      // o ajuste fica salvo e vale na próxima vez que o microfone ligar
+    }
+  }, []);
+
   /** Liga ou desliga a câmera (só por clique; o navegador pede a permissão na primeira vez). */
   const toggleCamera = useCallback(async () => {
     const r = room.current;
@@ -521,7 +533,7 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
     setState((s) => ({ ...s, needsAudio: false }));
   }, []);
 
-  return { ...state, remotes, setPersonVolume, toggleDeafen, switchDevice, speaking, mutedUsers, videos, cameraOn, cameraMessage, toggleCamera, screenOn, screenMessage, toggleScreen, measures, toggleMute, enableAudio, audioBox };
+  return { ...state, remotes, setPersonVolume, toggleDeafen, switchDevice, setAudioProcessing, speaking, mutedUsers, videos, cameraOn, cameraMessage, toggleCamera, screenOn, screenMessage, toggleScreen, measures, toggleMute, enableAudio, audioBox };
 }
 
 /** Lista de quem está na sala (abaixo do nome do canal). */
@@ -623,6 +635,14 @@ function VoiceSettings({ call }: { call: ReturnType<typeof useVoiceCall> }) {
       {select("Microfone", "audioinput", prefs.micId)}
       {select("Câmera", "videoinput", prefs.camId)}
       {canPickSpeaker && select("Caixa de som", "audiooutput", prefs.speakerId)}
+      <label className="check">
+        <input type="checkbox" checked={prefs.noiseSuppression} onChange={(e) => void call.setAudioProcessing({ noiseSuppression: e.target.checked })} />
+        Supressão de ruído do microfone
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={prefs.echoCancellation} onChange={(e) => void call.setAudioProcessing({ echoCancellation: e.target.checked })} />
+        Cancelamento de eco
+      </label>
       <label className="check">
         <input type="checkbox" checked={prefs.pushToTalk} onChange={(e) => updateVoicePrefs({ pushToTalk: e.target.checked })} />
         Falar só segurando uma tecla
