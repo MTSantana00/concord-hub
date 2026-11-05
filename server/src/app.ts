@@ -111,7 +111,7 @@ export function createApp({ db, offlineGraceMs, ringMs, audioDir, imagesDir, med
         // A página só carrega o que é dela; fala com o próprio servidor e com o servidor de mídia; ninguém a coloca em moldura
         "Content-Security-Policy": [
           "default-src 'self'",
-          "script-src 'self'",
+          "script-src 'self' 'wasm-unsafe-eval'", // o filtro de ruído do microfone (RNNoise) roda em WebAssembly
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: blob:",
           "media-src 'self' blob:",

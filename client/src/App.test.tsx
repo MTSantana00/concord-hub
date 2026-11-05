@@ -50,6 +50,8 @@ const livekit = vi.hoisted(() => {
   }
   return { FakeRoom };
 });
+// o filtro forte de ruído usa AudioWorklet (que o jsdom não tem): aqui só importa que ele é ligado na faixa
+vi.mock("./noiseProcessor", () => ({ createNoiseProcessor: () => ({ name: "concord-noise-suppression" }) }));
 vi.mock("livekit-client", () => ({
   Room: livekit.FakeRoom,
   RoomEvent: {
@@ -67,7 +69,7 @@ vi.mock("livekit-client", () => ({
     ParticipantConnected: "participantConnected",
     ParticipantDisconnected: "participantDisconnected",
   },
-  Track: { Kind: { Audio: "audio", Video: "video" }, Source: { Camera: "camera", ScreenShare: "screen_share" } },
+  Track: { Kind: { Audio: "audio", Video: "video" }, Source: { Camera: "camera", ScreenShare: "screen_share", Microphone: "microphone", ScreenShareAudio: "screen_share_audio" } },
 }));
 
 /** WebSocket falso: o teste controla quando abre, fecha e recebe eventos. */
@@ -3112,20 +3114,67 @@ describe("voz melhor: dispositivos, volume, ensurdecer, apertar para falar e tir
     delete (HTMLMediaElement.prototype as unknown as Record<string, unknown>).setSinkId;
   });
 
-  it("supressão de ruído e eco: já vêm ligadas, valem ao entrar, mudam na hora com o microfone aberto e ficam guardadas", async () => {
+  it("supressão de ruído: já vem ligada, entra com o filtro forte e liga/desliga na hora sem calar o microfone", async () => {
     stubApi(base());
     const barra = await entrar();
     expect(sala().options.audioCaptureDefaults).toMatchObject({ noiseSuppression: true, echoCancellation: true });
+    const setProcessor = vi.fn(async (_p: unknown) => {});
+    const stopProcessor = vi.fn(async () => {});
     const restartTrack = vi.fn(async (_o: object) => {});
-    sala().localParticipant.pubs.microphone = { audioTrack: { restartTrack } };
+    sala().localParticipant.pubs.microphone = { audioTrack: { setProcessor, stopProcessor, getProcessor: () => undefined, restartTrack } };
+    sala().localParticipant.setMicrophoneEnabled.mockClear();
     await userEvent.click(within(barra).getByText("⚙ Ajustes de voz"));
     const ruido = within(barra).getByLabelText("Supressão de ruído do microfone") as HTMLInputElement;
     expect(ruido.checked).toBe(true);
-    await userEvent.click(ruido);
-    await vi.waitFor(() => expect(restartTrack).toHaveBeenCalledWith(expect.objectContaining({ noiseSuppression: false, echoCancellation: true })));
-    expect(JSON.parse(localStorage.getItem("concord.voice")!)).toMatchObject({ noiseSuppression: false, echoCancellation: true });
+    await userEvent.click(ruido); // desliga
+    await vi.waitFor(() => expect(stopProcessor).toHaveBeenCalled());
+    expect(restartTrack).not.toHaveBeenCalled();
+    expect(sala().localParticipant.setMicrophoneEnabled).not.toHaveBeenCalled(); // não mexe no mudo
+    expect(JSON.parse(localStorage.getItem("concord.voice")!)).toMatchObject({ noiseSuppression: false });
+    await userEvent.click(ruido); // liga de novo
+    await vi.waitFor(() => expect(setProcessor).toHaveBeenCalledWith(expect.objectContaining({ name: "concord-noise-suppression" })));
+  });
+
+  it("supressão de ruído: se o navegador não muda a faixa em uso, reinicia e mantém o microfone aberto", async () => {
+    stubApi(base());
+    const barra = await entrar();
+    const restartTrack = vi.fn(async (_o: object) => {});
+    sala().localParticipant.pubs.microphone = { audioTrack: { mediaStreamTrack: { applyConstraints: vi.fn(async () => { throw new Error("não suportado"); }) }, restartTrack } };
+    sala().localParticipant.isMicrophoneEnabled = true;
+    sala().localParticipant.setMicrophoneEnabled.mockClear();
+    await userEvent.click(within(barra).getByText("⚙ Ajustes de voz"));
     await userEvent.click(within(barra).getByLabelText("Cancelamento de eco"));
-    await vi.waitFor(() => expect(restartTrack).toHaveBeenLastCalledWith(expect.objectContaining({ noiseSuppression: false, echoCancellation: false })));
+    await vi.waitFor(() => expect(restartTrack).toHaveBeenCalledWith(expect.objectContaining({ echoCancellation: false })));
+    await vi.waitFor(() => expect(sala().localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true));
+  });
+
+  it("transmissão de tela: volume próprio (separado da voz) e tela cheia no quadro", async () => {
+    Object.defineProperty(document, "fullscreenEnabled", { value: true, configurable: true });
+    stubApi(base());
+    await entrar();
+    act(() => FakeWebSocket.instances[0].emit({ type: "voice.joined", serverId: 7, channelId: 4, user: { id: 2, username: "beto" } }));
+    const tela = { attach: vi.fn(), detach: vi.fn(), getSenderStats: vi.fn(async () => []), getReceiverStats: vi.fn(async () => undefined) };
+    sala().remoteParticipants.set("2", { identity: "2", name: "beto", isMicrophoneEnabled: true, getTrackPublication: (fonte: string) => (fonte === "screen_share" ? { track: tela, isMuted: false } : undefined) });
+    act(() => sala().handlers.trackSubscribed({ kind: "video", attach: () => document.createElement("video"), detach: () => [] }));
+    const voz = { ...faixaDeAudio(), source: "microphone" };
+    const somTela = { ...faixaDeAudio(), source: "screen_share_audio" };
+    act(() => sala().handlers.trackSubscribed(voz, {}, beto));
+    act(() => sala().handlers.trackSubscribed(somTela, {}, beto));
+
+    const quadro = await screen.findByLabelText("Tela de beto");
+    const controle = within(quadro).getByLabelText("Volume da transmissão de beto") as HTMLInputElement;
+    expect(controle.value).toBe("100");
+    fireEvent.change(controle, { target: { value: "25" } });
+    await vi.waitFor(() => expect(somTela.setVolume).toHaveBeenLastCalledWith(0.25)); // só o som da transmissão muda
+    expect(voz.setVolume).not.toHaveBeenLastCalledWith(0.25);
+    expect(JSON.parse(localStorage.getItem("concord.voice")!).streamVolumes).toEqual({ "2": 25 });
+
+    // tela cheia pelo botão
+    const requestFullscreen = vi.fn(async () => {});
+    (quadro as unknown as { requestFullscreen: unknown }).requestFullscreen = requestFullscreen;
+    await userEvent.click(within(quadro).getByRole("button", { name: /^Tela cheia: Tela de beto/ }));
+    expect(requestFullscreen).toHaveBeenCalled();
+    delete (document as unknown as Record<string, unknown>).fullscreenEnabled;
   });
 
   it("volume de cada pessoa: o controle aparece para quem está na sala, vale na hora e fica guardado para as próximas vezes", async () => {

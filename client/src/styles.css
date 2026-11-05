@@ -662,3 +662,15 @@ button, input, select, textarea { font-family: inherit; }
 .poll-form-row input { flex: 1; min-width: 0; }
 .poll-multiple { font-size: 0.9rem; display: flex; gap: 6px; align-items: center; }
 .slowmode-note { margin: 4px 12px; font-size: 0.85rem; }
+
+/* Volume da transmissão e tela cheia nos quadros de vídeo */
+.tile-controls { position: absolute; right: 6px; bottom: 6px; display: flex; align-items: center; gap: 6px; opacity: 0; transition: opacity .15s; }
+.video-tile:hover .tile-controls, .video-tile:focus-within .tile-controls, .video-tile.is-full .tile-controls { opacity: 1; }
+@media (hover: none) { .tile-controls { opacity: 1; } }
+.tile-volume { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 8px; background: rgba(0,0,0,.65); backdrop-filter: blur(6px); }
+.tile-volume input[type="range"] { width: 96px; margin: 0; }
+.tile-btn { min-width: 36px; min-height: 36px; padding: 0 8px; border: 0; border-radius: 8px; background: rgba(0,0,0,.65); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; backdrop-filter: blur(6px); }
+.tile-btn:hover { background: rgba(0,0,0,.85); }
+.video-tile.is-full { border-radius: 0; box-shadow: none; aspect-ratio: auto; width: 100%; height: 100%; background: #000; }
+.video-tile.is-full video { object-fit: contain; }
+.video-tile video { cursor: pointer; }

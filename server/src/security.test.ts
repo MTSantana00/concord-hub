@@ -69,7 +69,8 @@ describe("cabeçalhos de segurança", () => {
     const csp = h["content-security-policy"] as string;
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("script-src 'self'"); // sem script inline nem de fora
-    expect(csp).not.toMatch(/script-src[^;]*unsafe/);
+    expect(csp).not.toMatch(/script-src[^;]*'unsafe-/); // 'wasm-unsafe-eval' só libera WebAssembly (filtro de ruído), não script de texto
+    expect(csp).toContain("'wasm-unsafe-eval'");
     expect(csp).toContain("connect-src 'self' wss://sala.livekit.cloud https://sala.livekit.cloud");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("object-src 'none'");

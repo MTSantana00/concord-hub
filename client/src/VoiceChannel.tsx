@@ -181,6 +181,25 @@ function cameraError(err: unknown): string {
   return "Não foi possível abrir a câmera.";
 }
 
+type FaixaMic = { setProcessor?: (p: unknown) => Promise<void>; stopProcessor?: () => Promise<void>; getProcessor?: () => unknown };
+
+/** Liga ou desliga o filtro forte de ruído (RNNoise) na faixa do microfone. Se o aparelho não suportar, a voz segue com o filtro do navegador. */
+async function syncNoiseFilter(track: FaixaMic | undefined, on: boolean): Promise<boolean> {
+  if (!track?.setProcessor) return false;
+  try {
+    if (on) {
+      if (track.getProcessor?.()) return true;
+      const { createNoiseProcessor } = await import("./noiseProcessor");
+      await track.setProcessor(createNoiseProcessor());
+    } else {
+      await track.stopProcessor?.();
+    }
+    return on;
+  } catch {
+    return false;
+  }
+}
+
 const IDLE: CallState = { status: "idle", muted: false, message: null, needsAudio: false, deafened: false };
 
 /** Quem está digitando em algum campo não deve disparar a tecla de falar. */
@@ -216,6 +235,8 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
   const room = useRef<Room | null>(null);
   const players = useRef(new Map<unknown, HTMLElement>());
   const audioTracks = useRef(new Map<unknown, number>());
+  /** Faixas de som de transmissão de tela (têm volume próprio, separado do da voz). */
+  const screenAudio = useRef(new Set<unknown>());
   const deafenedRef = useRef(false);
   const micWasOffRef = useRef(false);
   const audioBox = useRef<HTMLDivElement>(null);
@@ -238,8 +259,10 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
     // O LiveKit chama detach() sozinho ao parar a faixa, então guardamos o elemento para tirá-lo da página
     players.current = new Map();
     audioTracks.current = new Map();
+    screenAudio.current = new Set();
     function applyVolume(track: unknown, el: HTMLElement, uid: number) {
-      const v = (getVoicePrefs().volumes[String(uid)] ?? 100) / 100;
+      const prefs = getVoicePrefs();
+      const v = ((screenAudio.current.has(track) ? prefs.streamVolumes : prefs.volumes)[String(uid)] ?? 100) / 100;
       const t = track as { setVolume?: (n: number) => void };
       if (typeof t.setVolume === "function") t.setVolume(v);
       else (el as HTMLMediaElement).volume = v;
@@ -251,6 +274,7 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
         el.muted = deafenedRef.current;
         const uid = Number(participant?.identity);
         audioTracks.current.set(track, uid);
+        if (track.source === Track.Source.ScreenShareAudio) screenAudio.current.add(track); // som da transmissão: volume próprio
         applyVolume(track, el, uid);
         audioBox.current?.appendChild(el);
       }
@@ -260,6 +284,7 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
       players.current.get(track)?.remove();
       players.current.delete(track);
       audioTracks.current.delete(track);
+      screenAudio.current.delete(track);
       track.detach().forEach((el) => el.remove());
       refreshMuted();
     });
@@ -328,6 +353,7 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
         refreshMuted();
         try {
           await r.localParticipant.setMicrophoneEnabled(true);
+          if (getVoicePrefs().noiseSuppression) await syncNoiseFilter(r.localParticipant.getTrackPublication(lk.Track.Source.Microphone)?.audioTrack as FaixaMic | undefined, true);
         } catch (err) {
           if (!cancelled) setState((s) => ({ ...s, muted: true, message: micError(err) + " Você continua ouvindo a sala." }));
         }
@@ -375,7 +401,7 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
   const setPersonVolume = useCallback((userId: number, percent: number) => {
     updateVoicePrefs({ volumes: { ...getVoicePrefs().volumes, [String(userId)]: percent } });
     for (const [track, uid] of audioTracks.current) {
-      if (uid !== userId) continue;
+      if (uid !== userId || screenAudio.current.has(track)) continue;
       const t = track as { setVolume?: (n: number) => void };
       const el = players.current.get(track) as HTMLMediaElement | undefined;
       if (typeof t.setVolume === "function") t.setVolume(percent / 100);
@@ -411,15 +437,32 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
     }
   }, []);
 
-  /** Liga/desliga supressão de ruído ou eco no meio da chamada, sem sair da sala. */
+  /** Liga/desliga supressão de ruído ou eco no meio da chamada, sem sair da sala e sem calar o microfone. */
   const setAudioProcessing = useCallback(async (patch: { noiseSuppression?: boolean; echoCancellation?: boolean }) => {
     updateVoicePrefs(patch);
     const p = getVoicePrefs();
+    type Faixa = { mediaStreamTrack?: { applyConstraints?: (c: object) => Promise<void> }; restartTrack?: (o: object) => Promise<void> };
+    type Participante = { isMicrophoneEnabled?: boolean; setMicrophoneEnabled?: (on: boolean) => Promise<unknown>; getTrackPublication?: (s: string) => { audioTrack?: Faixa } | undefined };
+    const lp = (room.current as unknown as { localParticipant?: Participante } | null)?.localParticipant;
+    const faixa = lp?.getTrackPublication?.("microphone")?.audioTrack;
+    if (!lp || !faixa) return; // microfone fechado: o ajuste fica salvo e vale quando ele abrir
+    if ("noiseSuppression" in patch) {
+      await syncNoiseFilter(faixa as FaixaMic, p.noiseSuppression);
+      if (!("echoCancellation" in patch)) return;
+    }
+    const aberto = lp.isMicrophoneEnabled !== false;
+    const ajuste = { noiseSuppression: p.noiseSuppression, echoCancellation: p.echoCancellation };
     try {
-      const pub = (room.current as unknown as { localParticipant?: { getTrackPublication?: (s: string) => { audioTrack?: { restartTrack?: (o: object) => Promise<void> } } | undefined } } | null)?.localParticipant?.getTrackPublication?.("microphone");
-      await pub?.audioTrack?.restartTrack?.({ noiseSuppression: p.noiseSuppression, echoCancellation: p.echoCancellation, ...(p.micId ? { deviceId: p.micId } : {}) });
+      // o jeito suave: muda a faixa que já está em uso, sem reiniciá-la (reiniciar pode deixar o microfone mudo)
+      if (!faixa.mediaStreamTrack?.applyConstraints) throw new Error("sem applyConstraints");
+      await faixa.mediaStreamTrack.applyConstraints(ajuste);
     } catch {
-      // o ajuste fica salvo e vale na próxima vez que o microfone ligar
+      try {
+        await faixa.restartTrack?.({ ...ajuste, ...(p.micId ? { deviceId: p.micId } : {}) });
+        if (aberto) await lp.setMicrophoneEnabled?.(true); // quem estava falando continua falando
+      } catch {
+        // o ajuste fica salvo e vale na próxima vez que o microfone ligar
+      }
     }
   }, []);
 
@@ -501,6 +544,17 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
 
   // Apertar para falar: com a opção ligada o microfone só abre enquanto a tecla está pressionada
   const prefs = useVoicePrefs();
+  // O volume da transmissão (slider no quadro da tela) vale na hora para o som que a pessoa está compartilhando
+  useEffect(() => {
+    for (const [track, uid] of audioTracks.current) {
+      if (!screenAudio.current.has(track)) continue;
+      const v = (prefs.streamVolumes[String(uid)] ?? 100) / 100;
+      const t = track as { setVolume?: (n: number) => void };
+      const el = players.current.get(track) as HTMLMediaElement | undefined;
+      if (typeof t.setVolume === "function") t.setVolume(v);
+      else if (el) el.volume = v;
+    }
+  }, [prefs.streamVolumes]);
   const pttActive = prefs.pushToTalk && state.status === "connected";
   useEffect(() => {
     if (!pttActive) return;
@@ -778,6 +832,9 @@ export function VoiceBar({
 /** Um quadro de vídeo: liga a faixa do LiveKit ao elemento <video>. */
 function VideoTile({ entry, name, measure }: { entry: VideoEntry; name: string; measure?: Measure }) {
   const ref = useRef<HTMLVideoElement>(null);
+  const box = useRef<HTMLElement>(null);
+  const [full, setFull] = useState(false);
+  const { streamVolumes } = useVoicePrefs();
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -786,11 +843,29 @@ function VideoTile({ entry, name, measure }: { entry: VideoEntry; name: string; 
       entry.track.detach(el);
     };
   }, [entry.track]);
+  useEffect(() => {
+    const onChange = () => setFull(document.fullscreenElement === box.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
   const screen = entry.source === "screen";
   const verdict = screen && measure ? assess(measure) : null;
+  const volume = streamVolumes[String(entry.userId)] ?? 100;
+  const canFullscreen = typeof document !== "undefined" && (document.fullscreenEnabled || typeof (ref.current as unknown as { webkitEnterFullscreen?: unknown } | null)?.webkitEnterFullscreen === "function");
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+      return;
+    }
+    const el = box.current;
+    const video = ref.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+    if (el?.requestFullscreen) void el.requestFullscreen().catch(() => {});
+    else video?.webkitEnterFullscreen?.(); // iPhone: só o <video> abre em tela cheia
+  }
+  const label = `${screen ? "Tela" : "Câmera"} de ${name}`;
   return (
-    <figure className={`video-tile${screen ? " screen" : ""}`} aria-label={`${screen ? "Tela" : "Câmera"} de ${name}`}>
-      <video ref={ref} autoPlay playsInline muted className={entry.local && !screen ? "mirror" : undefined} />
+    <figure ref={box} className={`video-tile${screen ? " screen" : ""}${full ? " is-full" : ""}`} aria-label={label}>
+      <video ref={ref} autoPlay playsInline muted className={entry.local && !screen ? "mirror" : undefined} onDoubleClick={toggleFullscreen} />
       <figcaption>{entry.local ? `${name} (você)` : name}</figcaption>
       {screen && (
         <div className={`quality ${verdict ? (verdict.ok ? "ok" : "low") : ""}`} role="status" aria-label="Qualidade da tela">
@@ -798,6 +873,26 @@ function VideoTile({ entry, name, measure }: { entry: VideoEntry; name: string; 
           {verdict && !verdict.ok && <span className="quality-note">{verdict.note}</span>}
         </div>
       )}
+      <div className="tile-controls">
+        {screen && !entry.local && (
+          <label className="tile-volume">
+            <span aria-hidden="true">{volume === 0 ? "🔇" : volume < 50 ? "🔉" : "🔊"}</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              aria-label={`Volume da transmissão de ${name}`}
+              value={volume}
+              onChange={(e) => updateVoicePrefs({ streamVolumes: { ...getVoicePrefs().streamVolumes, [String(entry.userId)]: Number(e.target.value) } })}
+            />
+          </label>
+        )}
+        {canFullscreen && (
+          <button type="button" className="tile-btn" aria-label={full ? `Sair da tela cheia: ${label}` : `Tela cheia: ${label}`} title={full ? "Sair da tela cheia (Esc)" : "Tela cheia (ou dois cliques no vídeo)"} onClick={toggleFullscreen}>
+            {full ? "⤡" : "⛶"}
+          </button>
+        )}
+      </div>
     </figure>
   );
 }

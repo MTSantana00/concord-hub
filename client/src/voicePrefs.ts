@@ -15,16 +15,23 @@ export interface VoicePrefs {
   echoCancellation: boolean;
   /** Volume de cada pessoa (0 a 100), por id de usuário. Ausente = 100. */
   volumes: Record<string, number>;
+  /** Volume da transmissão de tela de cada pessoa (0 a 100), à parte da voz. Ausente = 100. */
+  streamVolumes: Record<string, number>;
 }
 
 const KEY = "concord.voice";
-const DEFAULT: VoicePrefs = { micId: "", camId: "", speakerId: "", pushToTalk: false, pttKey: "KeyV", noiseSuppression: true, echoCancellation: true, volumes: {} };
+const DEFAULT: VoicePrefs = { micId: "", camId: "", speakerId: "", pushToTalk: false, pttKey: "KeyV", noiseSuppression: true, echoCancellation: true, volumes: {}, streamVolumes: {} };
 
 function load(): VoicePrefs {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? "null") as Partial<VoicePrefs> | null;
-    const volumes: Record<string, number> = {};
-    for (const [id, v] of Object.entries(s?.volumes ?? {})) if (typeof v === "number" && v >= 0 && v <= 100) volumes[id] = Math.round(v);
+    const clean = (raw: unknown) => {
+      const out: Record<string, number> = {};
+      for (const [id, v] of Object.entries((raw ?? {}) as Record<string, unknown>)) if (typeof v === "number" && v >= 0 && v <= 100) out[id] = Math.round(v);
+      return out;
+    };
+    const volumes = clean(s?.volumes);
+    const streamVolumes = clean(s?.streamVolumes);
     return {
       micId: typeof s?.micId === "string" ? s.micId : "",
       camId: typeof s?.camId === "string" ? s.camId : "",
@@ -34,6 +41,7 @@ function load(): VoicePrefs {
       noiseSuppression: s?.noiseSuppression !== false,
       echoCancellation: s?.echoCancellation !== false,
       volumes,
+      streamVolumes,
     };
   } catch {
     return DEFAULT;
