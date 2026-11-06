@@ -1,14 +1,15 @@
-// Supressão de ruído "de verdade" para o microfone: RNNoise (rede neural, roda no próprio aparelho, grátis) e um portão de ruído.
+// Supressão de ruído "de verdade" para o microfone: GTCRN (rede neural, roda no próprio aparelho, grátis) e um portão de ruído.
 // O filtro do navegador é fraco com teclado, ventilador e conversa ao fundo; este tira o ruído antes de a voz sair para a sala.
+// Medido com fala sintética + cliques de teclado: o RNNoise cortava só 6 a 12 dB dos cliques; o GTCRN corta ~22 dB durante a fala
+// (e ~31 dB com o portão) e quase tudo no silêncio, sem perder nível de voz.
 // Roda só no aparelho de quem fala: nenhum áudio vai para fora do Concord por causa dele.
 import type { AudioProcessorOptions, Track, TrackProcessor } from "livekit-client";
-import { loadRnnoise, NoiseGateWorkletNode, RnnoiseWorkletNode } from "@sapphi-red/web-noise-suppressor";
+import { GtcrnWorkletNode, loadGtcrn, NoiseGateWorkletNode } from "@sapphi-red/web-noise-suppressor";
 import noiseGateWorkletPath from "@sapphi-red/web-noise-suppressor/noiseGateWorklet.js?url";
-import rnnoiseSimdWasmPath from "@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url";
-import rnnoiseWasmPath from "@sapphi-red/web-noise-suppressor/rnnoise.wasm?url";
-import rnnoiseWorkletPath from "@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url";
+import gtcrnWasmPath from "@sapphi-red/web-noise-suppressor/gtcrn.wasm?url";
+import gtcrnWorkletPath from "@sapphi-red/web-noise-suppressor/gtcrnWorklet.js?url";
 
-/** O RNNoise só entende 48 kHz; por isso este processador usa o próprio contexto de áudio, e não o do LiveKit. */
+/** O filtro trabalha a 48 kHz; por isso este processador usa o próprio contexto de áudio, e não o do LiveKit. */
 const SAMPLE_RATE = 48_000;
 /** Portão: abre com a voz e fecha no silêncio, sem ninguém precisar apertar tecla. Valores em dB. */
 const GATE = { openThreshold: -55, closeThreshold: -62, holdMs: 300, maxChannels: 1 };
@@ -40,17 +41,17 @@ export function createNoiseProcessor(): NoiseProcessor {
     const context = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: "interactive" });
     ctx = context;
     try {
-      wasm ??= await loadRnnoise({ url: rnnoiseWasmPath, simdUrl: rnnoiseSimdWasmPath });
-      await context.audioWorklet.addModule(rnnoiseWorkletPath);
+      wasm ??= await loadGtcrn({ url: gtcrnWasmPath });
+      await context.audioWorklet.addModule(gtcrnWorkletPath);
       await context.audioWorklet.addModule(noiseGateWorkletPath);
       const source = context.createMediaStreamSource(new MediaStream([track]));
-      const rnnoise = new RnnoiseWorkletNode(context, { wasmBinary: wasm, maxChannels: 1 });
+      const denoise = new GtcrnWorkletNode(context, { wasmBinary: wasm, maxChannels: 1 });
       const gate = new NoiseGateWorkletNode(context, GATE);
       const out = context.createMediaStreamDestination();
-      source.connect(rnnoise);
-      rnnoise.connect(gate);
+      source.connect(denoise);
+      denoise.connect(gate);
       gate.connect(out);
-      nodes = [source, rnnoise, gate, out];
+      nodes = [source, denoise, gate, out];
       if (context.state === "suspended") await context.resume().catch(() => {});
       processor.processedTrack = out.stream.getAudioTracks()[0];
     } catch (err) {
