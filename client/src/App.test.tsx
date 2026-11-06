@@ -51,6 +51,7 @@ const livekit = vi.hoisted(() => {
   return { FakeRoom };
 });
 // o filtro forte de ruído usa AudioWorklet (que o jsdom não tem): aqui só importa que ele é ligado na faixa
+vi.mock("./micTest", () => ({ startMicTest: vi.fn(async (_filtrado: boolean) => ({ stop: vi.fn() })) }));
 vi.mock("./noiseProcessor", () => ({ createNoiseProcessor: () => ({ name: "concord-noise-suppression" }) }));
 vi.mock("livekit-client", () => ({
   Room: livekit.FakeRoom,
@@ -3133,6 +3134,36 @@ describe("voz melhor: dispositivos, volume, ensurdecer, apertar para falar e tir
     expect(JSON.parse(localStorage.getItem("concord.voice")!)).toMatchObject({ noiseSuppression: false });
     await userEvent.click(ruido); // liga de novo
     await vi.waitFor(() => expect(setProcessor).toHaveBeenCalledWith(expect.objectContaining({ name: "concord-noise-suppression" })));
+  });
+
+  it("filtro de ruído mostra se está ativo e o teste do microfone toca com e sem o filtro", async () => {
+    stubApi(base());
+    const barra = await entrar();
+    sala().localParticipant.pubs.microphone = { audioTrack: { setProcessor: vi.fn(async (_p: unknown) => {}), stopProcessor: vi.fn(async () => {}), getProcessor: () => undefined } };
+    await userEvent.click(within(barra).getByText("⚙ Ajustes de voz"));
+    const ruido = within(barra).getByLabelText("Supressão de ruído do microfone");
+    await userEvent.click(ruido); // desliga: o aviso some
+    expect(within(barra).queryByText(/Filtro forte de ruído/)).toBeNull();
+    await userEvent.click(ruido); // liga: agora o filtro entra e o aviso diz que está ativo
+    expect(await within(barra).findByText(/Filtro forte de ruído: ativo/)).toBeTruthy();
+
+    const { startMicTest } = await import("./micTest");
+    await userEvent.click(within(barra).getByRole("button", { name: "Ouvir com o filtro" }));
+    expect(startMicTest).toHaveBeenLastCalledWith(true);
+    await userEvent.click(within(barra).getByRole("button", { name: "Ouvir sem o filtro" }));
+    expect(startMicTest).toHaveBeenLastCalledWith(false);
+    expect(within(barra).getAllByRole("button", { name: "Parar" })).toHaveLength(1);
+  });
+
+  it("filtro de ruído que não consegue ligar avisa o motivo", async () => {
+    stubApi(base());
+    const barra = await entrar();
+    sala().localParticipant.pubs.microphone = { audioTrack: { setProcessor: vi.fn(async () => { throw new Error("sem AudioWorklet"); }), stopProcessor: vi.fn(async () => {}), getProcessor: () => undefined } };
+    await userEvent.click(within(barra).getByText("⚙ Ajustes de voz"));
+    const ruido = within(barra).getByLabelText("Supressão de ruído do microfone");
+    await userEvent.click(ruido);
+    await userEvent.click(ruido);
+    expect(await within(barra).findByText(/não conseguiu ligar neste aparelho \(sem AudioWorklet\)/)).toBeTruthy();
   });
 
   it("supressão de ruído: se o navegador não muda a faixa em uso, reinicia e mantém o microfone aberto", async () => {

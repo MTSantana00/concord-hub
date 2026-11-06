@@ -181,22 +181,25 @@ function cameraError(err: unknown): string {
   return "Não foi possível abrir a câmera.";
 }
 
+/** Situação do filtro forte de ruído: ligado, desligado ou sem conseguir ligar (com o motivo, para a pessoa poder me contar). */
+export type NoiseStatus = { kind: "on" | "off" | "unavailable" | "waiting"; message?: string };
 type FaixaMic = { setProcessor?: (p: unknown) => Promise<void>; stopProcessor?: () => Promise<void>; getProcessor?: () => unknown };
 
 /** Liga ou desliga o filtro forte de ruído (RNNoise) na faixa do microfone. Se o aparelho não suportar, a voz segue com o filtro do navegador. */
-async function syncNoiseFilter(track: FaixaMic | undefined, on: boolean): Promise<boolean> {
-  if (!track?.setProcessor) return false;
+async function syncNoiseFilter(track: FaixaMic | undefined, on: boolean): Promise<NoiseStatus> {
+  if (!track) return { kind: on ? "waiting" : "off" };
+  if (!track.setProcessor) return { kind: on ? "unavailable" : "off", message: on ? "esta versão do navegador não aceita filtros" : undefined };
   try {
     if (on) {
-      if (track.getProcessor?.()) return true;
+      if (track.getProcessor?.()) return { kind: "on" };
       const { createNoiseProcessor } = await import("./noiseProcessor");
       await track.setProcessor(createNoiseProcessor());
-    } else {
-      await track.stopProcessor?.();
+      return { kind: "on" };
     }
-    return on;
-  } catch {
-    return false;
+    await track.stopProcessor?.();
+    return { kind: "off" };
+  } catch (err) {
+    return { kind: "unavailable", message: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -225,6 +228,7 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
   const [speaking, setSpeaking] = useState<number[]>([]);
   const [mutedUsers, setMutedUsers] = useState<number[]>([]);
   const [videos, setVideos] = useState<VideoEntry[]>([]);
+  const [noiseStatus, setNoiseStatus] = useState<NoiseStatus>({ kind: "waiting" });
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraMessage, setCameraMessage] = useState<string | null>(null);
   const [screenOn, setScreenOn] = useState(false);
@@ -353,7 +357,10 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
         refreshMuted();
         try {
           await r.localParticipant.setMicrophoneEnabled(true);
-          if (getVoicePrefs().noiseSuppression) await syncNoiseFilter(r.localParticipant.getTrackPublication(lk.Track.Source.Microphone)?.audioTrack as FaixaMic | undefined, true);
+          if (getVoicePrefs().noiseSuppression) {
+            const st = await syncNoiseFilter(r.localParticipant.getTrackPublication(lk.Track.Source.Microphone)?.audioTrack as FaixaMic | undefined, true);
+            if (!cancelled) setNoiseStatus(st);
+          } else setNoiseStatus({ kind: "off" });
         } catch (err) {
           if (!cancelled) setState((s) => ({ ...s, muted: true, message: micError(err) + " Você continua ouvindo a sala." }));
         }
@@ -445,9 +452,12 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
     type Participante = { isMicrophoneEnabled?: boolean; setMicrophoneEnabled?: (on: boolean) => Promise<unknown>; getTrackPublication?: (s: string) => { audioTrack?: Faixa } | undefined };
     const lp = (room.current as unknown as { localParticipant?: Participante } | null)?.localParticipant;
     const faixa = lp?.getTrackPublication?.("microphone")?.audioTrack;
-    if (!lp || !faixa) return; // microfone fechado: o ajuste fica salvo e vale quando ele abrir
+    if (!lp || !faixa) {
+      if ("noiseSuppression" in patch) setNoiseStatus(p.noiseSuppression ? { kind: "waiting" } : { kind: "off" });
+      return; // microfone fechado: o ajuste fica salvo e vale quando ele abrir
+    }
     if ("noiseSuppression" in patch) {
-      await syncNoiseFilter(faixa as FaixaMic, p.noiseSuppression);
+      setNoiseStatus(await syncNoiseFilter(faixa as FaixaMic, p.noiseSuppression));
       if (!("echoCancellation" in patch)) return;
     }
     const aberto = lp.isMicrophoneEnabled !== false;
@@ -587,7 +597,7 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
     setState((s) => ({ ...s, needsAudio: false }));
   }, []);
 
-  return { ...state, remotes, setPersonVolume, toggleDeafen, switchDevice, setAudioProcessing, speaking, mutedUsers, videos, cameraOn, cameraMessage, toggleCamera, screenOn, screenMessage, toggleScreen, measures, toggleMute, enableAudio, audioBox };
+  return { ...state, remotes, setPersonVolume, toggleDeafen, switchDevice, setAudioProcessing, noiseStatus, speaking, mutedUsers, videos, cameraOn, cameraMessage, toggleCamera, screenOn, screenMessage, toggleScreen, measures, toggleMute, enableAudio, audioBox };
 }
 
 /** Lista de quem está na sala (abaixo do nome do canal). */
@@ -649,6 +659,46 @@ function useDevices() {
 }
 
 /** Ajustes de voz: dispositivos, apertar para falar e volume de cada pessoa. */
+/** Ouvir o próprio microfone com e sem o filtro, para ouvir a diferença (use fones, senão dá eco). */
+function MicTester() {
+  const [mode, setMode] = useState<"off" | "raw" | "filtered">("off");
+  const [error, setError] = useState<string | null>(null);
+  const current = useRef<{ stop: () => void } | null>(null);
+  useEffect(() => () => current.current?.stop(), []);
+  async function toggle(next: "raw" | "filtered") {
+    current.current?.stop();
+    current.current = null;
+    setError(null);
+    if (mode === next) {
+      setMode("off");
+      return;
+    }
+    try {
+      const { startMicTest } = await import("./micTest");
+      current.current = await startMicTest(next === "filtered");
+      setMode(next);
+    } catch (err) {
+      setMode("off");
+      setError(err instanceof Error ? err.message : "Não foi possível testar o microfone.");
+    }
+  }
+  return (
+    <div className="mic-test">
+      <strong>Testar o microfone</strong>
+      <p className="muted">Use fones de ouvido (senão dá eco). Digite e clique perto do microfone e compare.</p>
+      <div className="mic-test-buttons">
+        <button type="button" className="small secondary" aria-pressed={mode === "raw"} onClick={() => void toggle("raw")}>
+          {mode === "raw" ? "Parar" : "Ouvir sem o filtro"}
+        </button>
+        <button type="button" className="small secondary" aria-pressed={mode === "filtered"} onClick={() => void toggle("filtered")}>
+          {mode === "filtered" ? "Parar" : "Ouvir com o filtro"}
+        </button>
+      </div>
+      {error && <p role="alert" className="error">{error}</p>}
+    </div>
+  );
+}
+
 function VoiceSettings({ call }: { call: ReturnType<typeof useVoiceCall> }) {
   const prefs = useVoicePrefs();
   const devices = useDevices();
@@ -693,6 +743,14 @@ function VoiceSettings({ call }: { call: ReturnType<typeof useVoiceCall> }) {
         <input type="checkbox" checked={prefs.noiseSuppression} onChange={(e) => void call.setAudioProcessing({ noiseSuppression: e.target.checked })} />
         Supressão de ruído do microfone
       </label>
+      {prefs.noiseSuppression && (
+        <p className={`noise-status ${call.noiseStatus.kind}`} aria-live="polite">
+          {call.noiseStatus.kind === "on" && "Filtro forte de ruído: ativo. Só a sua voz sai para a sala."}
+          {call.noiseStatus.kind === "waiting" && "Filtro forte de ruído: liga quando o microfone abrir."}
+          {call.noiseStatus.kind === "unavailable" && `Filtro forte de ruído: não conseguiu ligar neste aparelho${call.noiseStatus.message ? ` (${call.noiseStatus.message})` : ""}. Está valendo só o filtro do navegador.`}
+        </p>
+      )}
+      <MicTester />
       <label className="check">
         <input type="checkbox" checked={prefs.echoCancellation} onChange={(e) => void call.setAudioProcessing({ echoCancellation: e.target.checked })} />
         Cancelamento de eco
