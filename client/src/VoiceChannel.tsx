@@ -1,4 +1,5 @@
 import type { Room, VideoTrack } from "livekit-client";
+import { onGateLevel, type GateLevel } from "./gateLevel";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "./api";
 import { micError } from "./AudioRecorder";
@@ -659,6 +660,35 @@ function useDevices() {
 }
 
 /** Ajustes de voz: dispositivos, apertar para falar e volume de cada pessoa. */
+/** Sensibilidade do portão de voz e medidor ao vivo: quem tem microfone muito sensível (condensador) ajusta aqui até o teclado não passar. */
+function GateControls() {
+  const prefs = useVoicePrefs();
+  const [level, setLevel] = useState<(GateLevel & { at: number }) | null>(null);
+  useEffect(() => onGateLevel((l) => setLevel({ ...l, at: Date.now() })), []);
+  const live = level && Date.now() - level.at < 2000 ? level : null;
+  const pct = (db: number) => `${Math.max(0, Math.min(100, ((db + 80) / 80) * 100))}%`;
+  const threshold = prefs.gateAuto ? live?.threshold : prefs.gateDb;
+  return (
+    <div className="gate-controls">
+      <label className="check">
+        <input type="checkbox" checked={prefs.gateAuto} onChange={(e) => updateVoicePrefs({ gateAuto: e.target.checked })} />
+        Sensibilidade automática (aprende o ruído do seu quarto e o volume da sua voz)
+      </label>
+      {!prefs.gateAuto && (
+        <label className="voice-volume">
+          <span>Só passa som acima de {prefs.gateDb} dB</span>
+          <input type="range" min={-70} max={-20} step={1} aria-label="Limite do portão de voz" value={prefs.gateDb} onChange={(e) => updateVoicePrefs({ gateDb: Number(e.target.value) })} />
+        </label>
+      )}
+      <div className="level-meter" role="img" aria-label={live ? `Volume do microfone ${Math.round(live.db)} dB, ${live.open ? "portão aberto" : "portão fechado"}` : "Medidor do microfone: abre quando o microfone estiver aberto ou em teste"}>
+        <div className={`level-fill${live?.open ? " open" : ""}`} style={{ width: live ? pct(live.db) : "0%" }} />
+        {threshold !== undefined && <div className="level-thr" style={{ left: pct(threshold) }} />}
+      </div>
+      <p className="muted">{live ? (live.open ? "Portão aberto: sua voz está saindo." : "Portão fechado: nada está saindo.") : "O medidor aparece com o microfone aberto na chamada ou no teste abaixo."}</p>
+    </div>
+  );
+}
+
 /** Ouvir o próprio microfone com e sem o filtro, para ouvir a diferença (use fones, senão dá eco). */
 function MicTester() {
   const [mode, setMode] = useState<"off" | "raw" | "filtered">("off");
@@ -750,6 +780,7 @@ function VoiceSettings({ call }: { call: ReturnType<typeof useVoiceCall> }) {
           {call.noiseStatus.kind === "unavailable" && `Filtro forte de ruído: não conseguiu ligar neste aparelho${call.noiseStatus.message ? ` (${call.noiseStatus.message})` : ""}. Está valendo só o filtro do navegador.`}
         </p>
       )}
+      {prefs.noiseSuppression && <GateControls />}
       <MicTester />
       <label className="check">
         <input type="checkbox" checked={prefs.echoCancellation} onChange={(e) => void call.setAudioProcessing({ echoCancellation: e.target.checked })} />

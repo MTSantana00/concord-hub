@@ -3155,6 +3155,24 @@ describe("voz melhor: dispositivos, volume, ensurdecer, apertar para falar e tir
     expect(within(barra).getAllByRole("button", { name: "Parar" })).toHaveLength(1);
   });
 
+  it("sensibilidade do portão: automática por padrão; no manual aparece o limite e fica guardado; o medidor mostra o nível", async () => {
+    stubApi(base());
+    const barra = await entrar();
+    await userEvent.click(within(barra).getByText("⚙ Ajustes de voz"));
+    const auto = within(barra).getByLabelText(/Sensibilidade automática/) as HTMLInputElement;
+    expect(auto.checked).toBe(true);
+    expect(within(barra).queryByLabelText("Limite do portão de voz")).toBeNull();
+    await userEvent.click(auto);
+    const limite = within(barra).getByLabelText("Limite do portão de voz") as HTMLInputElement;
+    expect(limite.value).toBe("-45");
+    fireEvent.change(limite, { target: { value: "-32" } });
+    expect(JSON.parse(localStorage.getItem("concord.voice")!)).toMatchObject({ gateAuto: false, gateDb: -32 });
+    expect(within(barra).getByText(/Só passa som acima de -32 dB/)).toBeTruthy();
+    const { emitGateLevel } = await import("./gateLevel");
+    act(() => emitGateLevel({ db: -20, threshold: -32, open: true }));
+    expect(within(barra).getByRole("img", { name: /Volume do microfone -20 dB, portão aberto/ })).toBeTruthy();
+  });
+
   it("filtro de ruído que não consegue ligar avisa o motivo", async () => {
     stubApi(base());
     const barra = await entrar();

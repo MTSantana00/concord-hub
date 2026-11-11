@@ -682,3 +682,11 @@ button, input, select, textarea { font-family: inherit; }
 .mic-test { display: flex; flex-direction: column; gap: 6px; }
 .mic-test p { margin: 0; font-size: 12px; }
 .mic-test-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Portão de voz: sensibilidade e medidor ao vivo */
+.gate-controls { display: flex; flex-direction: column; gap: 6px; }
+.gate-controls p { margin: 0; font-size: 12px; }
+.level-meter { position: relative; height: 10px; border-radius: 6px; background: var(--surface-3, rgba(255,255,255,.08)); overflow: hidden; }
+.level-fill { height: 100%; background: var(--muted-2); transition: width .06s linear; }
+.level-fill.open { background: var(--ok); }
+.level-thr { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #f0b232; }

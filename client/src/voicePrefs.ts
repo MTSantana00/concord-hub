@@ -17,10 +17,14 @@ export interface VoicePrefs {
   volumes: Record<string, number>;
   /** Volume da transmissão de tela de cada pessoa (0 a 100), à parte da voz. Ausente = 100. */
   streamVolumes: Record<string, number>;
+  /** Sensibilidade do portão de voz: automática (aprende o ruído e a voz) ou manual. */
+  gateAuto: boolean;
+  /** Limite do portão no modo manual, em dB (-70 muito sensível, -20 só voz alta). */
+  gateDb: number;
 }
 
 const KEY = "concord.voice";
-const DEFAULT: VoicePrefs = { micId: "", camId: "", speakerId: "", pushToTalk: false, pttKey: "KeyV", noiseSuppression: true, echoCancellation: true, volumes: {}, streamVolumes: {} };
+const DEFAULT: VoicePrefs = { micId: "", camId: "", speakerId: "", pushToTalk: false, pttKey: "KeyV", noiseSuppression: true, echoCancellation: true, volumes: {}, streamVolumes: {}, gateAuto: true, gateDb: -45 };
 
 function load(): VoicePrefs {
   try {
@@ -42,6 +46,8 @@ function load(): VoicePrefs {
       echoCancellation: s?.echoCancellation !== false,
       volumes,
       streamVolumes,
+      gateAuto: s?.gateAuto !== false,
+      gateDb: typeof s?.gateDb === "number" && s.gateDb >= -70 && s.gateDb <= -20 ? Math.round(s.gateDb) : DEFAULT.gateDb,
     };
   } catch {
     return DEFAULT;
@@ -52,6 +58,12 @@ let current = load();
 const listeners = new Set<() => void>();
 
 export const getVoicePrefs = () => current;
+
+/** Avisa quando as preferências mudam (usado pelo filtro de ruído para ajustar o portão ao vivo). */
+export function subscribeVoicePrefs(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
 
 export function updateVoicePrefs(patch: Partial<VoicePrefs>) {
   current = { ...current, ...patch };
