@@ -3223,6 +3223,14 @@ describe("voz melhor: dispositivos, volume, ensurdecer, apertar para falar e tir
     (quadro as unknown as { requestFullscreen: unknown }).requestFullscreen = requestFullscreen;
     await userEvent.click(within(quadro).getByRole("button", { name: /^Tela cheia: Tela de beto/ }));
     expect(requestFullscreen).toHaveBeenCalled();
+    // em tela cheia a imagem fica limpa: os controles só "acordam" com o movimento do mouse
+    Object.defineProperty(document, "fullscreenElement", { value: quadro, configurable: true });
+    act(() => document.dispatchEvent(new Event("fullscreenchange")));
+    expect(quadro.className).toContain("is-full");
+    expect(quadro.className).not.toContain("awake");
+    fireEvent.mouseMove(quadro);
+    expect(quadro.className).toContain("awake");
+    delete (document as unknown as Record<string, unknown>).fullscreenElement;
     delete (document as unknown as Record<string, unknown>).fullscreenEnabled;
   });
 

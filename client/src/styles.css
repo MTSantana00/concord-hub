@@ -690,3 +690,10 @@ button, input, select, textarea { font-family: inherit; }
 .level-fill { height: 100%; background: var(--muted-2); transition: width .06s linear; }
 .level-fill.open { background: var(--ok); }
 .level-thr { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #f0b232; }
+
+/* Tela cheia limpa: sem nome, sem qualidade e sem botões; os controles só aparecem enquanto o mouse se mexe */
+.video-tile.is-full figcaption, .video-tile.is-full .quality { display: none; }
+.video-tile.is-full .tile-controls { opacity: 0; pointer-events: none; }
+.video-tile.is-full.awake .tile-controls { opacity: 1; pointer-events: auto; }
+.video-tile.is-full:not(.awake) { cursor: none; }
+.video-tile.is-full:not(.awake) video { cursor: none; }

@@ -923,6 +923,9 @@ function VideoTile({ entry, name, measure }: { entry: VideoEntry; name: string; 
   const ref = useRef<HTMLVideoElement>(null);
   const box = useRef<HTMLElement>(null);
   const [full, setFull] = useState(false);
+  /** Em tela cheia a imagem fica limpa; os controles só aparecem enquanto o mouse se mexe (e somem 2,5 s depois). */
+  const [awake, setAwake] = useState(false);
+  const sleepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { streamVolumes } = useVoicePrefs();
   useEffect(() => {
     const el = ref.current;
@@ -933,10 +936,22 @@ function VideoTile({ entry, name, measure }: { entry: VideoEntry; name: string; 
     };
   }, [entry.track]);
   useEffect(() => {
-    const onChange = () => setFull(document.fullscreenElement === box.current);
+    const onChange = () => {
+      setFull(document.fullscreenElement === box.current);
+      setAwake(false);
+    };
     document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      if (sleepTimer.current) clearTimeout(sleepTimer.current);
+    };
   }, []);
+  function wake() {
+    if (!full) return;
+    setAwake(true);
+    if (sleepTimer.current) clearTimeout(sleepTimer.current);
+    sleepTimer.current = setTimeout(() => setAwake(false), 2500);
+  }
   const screen = entry.source === "screen";
   const verdict = screen && measure ? assess(measure) : null;
   const volume = streamVolumes[String(entry.userId)] ?? 100;
@@ -953,7 +968,7 @@ function VideoTile({ entry, name, measure }: { entry: VideoEntry; name: string; 
   }
   const label = `${screen ? "Tela" : "Câmera"} de ${name}`;
   return (
-    <figure ref={box} className={`video-tile${screen ? " screen" : ""}${full ? " is-full" : ""}`} aria-label={label}>
+    <figure ref={box} className={`video-tile${screen ? " screen" : ""}${full ? " is-full" : ""}${full && awake ? " awake" : ""}`} aria-label={label} onMouseMove={wake} onTouchStart={wake} onFocus={wake}>
       <video ref={ref} autoPlay playsInline muted className={entry.local && !screen ? "mirror" : undefined} onDoubleClick={toggleFullscreen} />
       <figcaption>{entry.local ? `${name} (você)` : name}</figcaption>
       {screen && (
