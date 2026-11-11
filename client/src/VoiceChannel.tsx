@@ -566,6 +566,32 @@ export function useVoiceCall(target: { kind: "channel" | "dm"; id: number } | nu
       else if (el) el.volume = v;
     }
   }, [prefs.streamVolumes]);
+  // Vigia do filtro de ruído: trocar de microfone (fone, USB), reconectar ou o aparelho reiniciar a faixa pode derrubar o filtro
+  // sem avisar, e aí o som cru sai para a sala. A cada 2 s confere e, se o filtro sumiu, liga de novo.
+  const noiseOn = prefs.noiseSuppression;
+  useEffect(() => {
+    if (state.status !== "connected" || !noiseOn) return;
+    let failures = 0;
+    const timer = setInterval(() => {
+      const lp = room.current?.localParticipant as unknown as { getTrackPublication?: (s: string) => { audioTrack?: FaixaMic } | undefined } | undefined;
+      const track = lp?.getTrackPublication?.("microphone")?.audioTrack;
+      if (!track?.setProcessor) return;
+      if (track.getProcessor?.()) {
+        failures = 0;
+        setNoiseStatus((st) => (st.kind === "on" ? st : { kind: "on" }));
+        return;
+      }
+      if (failures >= 3 && failures % 5 !== 0) {
+        failures++; // não insiste a cada 2 s se o aparelho não consegue: tenta de novo de tempos em tempos
+        return;
+      }
+      void syncNoiseFilter(track, true).then((st) => {
+        failures = st.kind === "on" ? 0 : failures + 1;
+        setNoiseStatus(st);
+      });
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [state.status, noiseOn]);
   const pttActive = prefs.pushToTalk && state.status === "connected";
   useEffect(() => {
     if (!pttActive) return;

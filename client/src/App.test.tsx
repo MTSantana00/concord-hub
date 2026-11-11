@@ -3173,6 +3173,18 @@ describe("voz melhor: dispositivos, volume, ensurdecer, apertar para falar e tir
     expect(within(barra).getByRole("img", { name: /Volume do microfone -20 dB, portão aberto/ })).toBeTruthy();
   });
 
+  it("vigia do filtro: se a faixa do microfone trocar e o filtro sumir, liga de novo sozinho", async () => {
+    stubApi(base());
+    const barra = await entrar();
+    let processor: unknown;
+    const setProcessor = vi.fn(async (p: unknown) => { processor = p; });
+    // faixa nova (ex.: trocou para o microfone do fone) sem filtro
+    sala().localParticipant.pubs.microphone = { audioTrack: { setProcessor, stopProcessor: vi.fn(async () => {}), getProcessor: () => processor } };
+    await vi.waitFor(() => expect(setProcessor).toHaveBeenCalledWith(expect.objectContaining({ name: "concord-noise-suppression" })), { timeout: 5000 });
+    await userEvent.click(within(barra).getByText("⚙ Ajustes de voz"));
+    expect(await within(barra).findByText(/Filtro forte de ruído: ativo/)).toBeTruthy();
+  });
+
   it("filtro de ruído que não consegue ligar avisa o motivo", async () => {
     stubApi(base());
     const barra = await entrar();
