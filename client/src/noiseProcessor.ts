@@ -14,6 +14,10 @@ import { getVoicePrefs, subscribeVoicePrefs } from "./voicePrefs";
 const SAMPLE_RATE = 48_000;
 /** Portão de voz próprio (public/voice-gate-worklet.js): só abre para o que dura como fala, então clique de teclado ou de mouse no silêncio não passa. */
 const GATE_WORKLET = "/voice-gate-worklet.js";
+/** Atraso do GTCRN (medido: ~32 ms): o som original que misturamos de volta precisa esperar o mesmo tempo, senão a voz fica "oca". */
+const DENOISE_LATENCY_S = 0.032;
+/** O GTCRN trabalha a 16 kHz e corta tudo acima de 8 kHz (-16 dB medido): a voz fica de telefone, abafada. Devolvemos esse brilho do som original (medido com fala: de -16 dB para -2 dB, e o nível da voz não muda). */
+const AIR_HZ = 7000;
 
 export type NoiseProcessor = TrackProcessor<Track.Kind.Audio, AudioProcessorOptions>;
 
@@ -59,10 +63,27 @@ export function createNoiseProcessor(): NoiseProcessor {
         gate.port.postMessage({ auto: p.gateAuto, thresholdDb: p.gateDb });
       });
       const out = context.createMediaStreamDestination();
+      // som limpo (GTCRN) + o "ar" acima de 8 kHz do original, atrasado o mesmo tanto (o GTCRN corta essa faixa)
+      const air = context.createGain();
+      air.gain.value = 0.5;
+      const delay = context.createDelay(0.2);
+      delay.delayTime.value = DENOISE_LATENCY_S;
+      const hp1 = context.createBiquadFilter();
+      const hp2 = context.createBiquadFilter();
+      for (const hp of [hp1, hp2]) {
+        hp.type = "highpass";
+        hp.frequency.value = AIR_HZ;
+        hp.Q.value = 0.707;
+      }
       source.connect(denoise);
       denoise.connect(gate);
+      source.connect(delay);
+      delay.connect(hp1);
+      hp1.connect(hp2);
+      hp2.connect(air);
+      air.connect(gate);
       gate.connect(out);
-      nodes = [source, denoise, gate, out];
+      nodes = [source, denoise, air, delay, hp1, hp2, gate, out];
       if (context.state === "suspended") await context.resume().catch(() => {});
       processor.processedTrack = out.stream.getAudioTracks()[0];
     } catch (err) {

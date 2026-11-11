@@ -38,7 +38,7 @@ class VoiceGate extends AudioWorkletProcessor {
   threshold() {
     if (!this.auto) return this.manualDb;
     // acima do ruído de fundo e perto do que a voz costuma atingir; nunca absurdamente alto nem baixo
-    return Math.min(-26, Math.max(-62, Math.max(this.floor + 14, this.speech - 26)));
+    return Math.min(-26, Math.max(-64, Math.max(this.floor + 12, this.speech - 30)));
   }
 
   process(inputs, outputs) {
