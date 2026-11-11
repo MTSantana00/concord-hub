@@ -17,7 +17,9 @@ class VoiceGate extends AudioWorkletProcessor {
     const o = (options && options.processorOptions) || {};
     this.auto = o.auto !== false;
     this.manualDb = typeof o.thresholdDb === "number" ? o.thresholdDb : -45;
-    this.delay = Math.round((LOOKAHEAD_MS / 1000) * sampleRate);
+    this.openAfterMs = typeof o.openAfterMs === "number" ? o.openAfterMs : OPEN_AFTER_MS;
+    this.holdMs = typeof o.holdMs === "number" ? o.holdMs : HOLD_MS;
+    this.delay = Math.round(((typeof o.lookaheadMs === "number" ? o.lookaheadMs : LOOKAHEAD_MS) / 1000) * sampleRate);
     this.size = this.delay + 256;
     this.ring = new Float32Array(this.size);
     this.write = 0;
@@ -63,13 +65,13 @@ class VoiceGate extends AudioWorkletProcessor {
     const closeThr = thr - HYSTERESIS_DB;
     if (!this.open) {
       this.aboveMs = db > thr ? this.aboveMs + blockMs : 0;
-      if (this.aboveMs >= OPEN_AFTER_MS) {
+      if (this.aboveMs >= this.openAfterMs) {
         this.open = true;
         this.belowMs = 0;
       }
     } else {
       this.belowMs = db < closeThr ? this.belowMs + blockMs : 0;
-      if (this.belowMs >= HOLD_MS) {
+      if (this.belowMs >= this.holdMs) {
         this.open = false;
         this.aboveMs = 0;
       }
